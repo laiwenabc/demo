@@ -1,0 +1,149 @@
+var path = require('path');
+var utils = require('./server/utils');
+var buildConfigs = require('./build-config');
+
+// 路径
+var rootPath = path.resolve(process.cwd()).replace(/\\/g, '/');
+var appPath = rootPath + '/app';
+var distRootPath = rootPath + '/dist';
+var distPath = distRootPath + '/zip';
+var componentPath = appPath + '/components';
+// 不允许存在 html 项目
+var htmlPathDic = 'html';
+var htmlPath = appPath + '/' + htmlPathDic;
+// 按需加载目录
+var ensurePathDic = 'ensure';
+var ensurePath = appPath + '/' + ensurePathDic;
+// 由于 entryMap 的 key 含有 js/ 所有打包后的 css 回存在同级 js 目录下，用 scssPath 来中转一下
+// === 目前未配置 ===
+var sassPathDic = 'css'
+var sassPath = appPath + '/' + sassPathDic;
+
+var _path = {
+    // 根目录
+    root: rootPath,
+    // 项目开发目录
+    app: appPath,
+    // 打包根目录
+    distRoot: distRootPath,
+    // 打包目录
+    dist: distPath,
+    // sass 打包中转文件夹
+    sassPathDic: sassPathDic,
+    // html 文件存放文件夹
+    htmlPathDic: htmlPathDic,
+    // 按需加载目录
+    ensurePathDic: ensurePathDic,
+    // lib 文件夹
+    lib: {
+        from: './components/libs',
+        to: './libs'
+    },
+    components: componentPath
+};
+exports.path = _path;
+
+
+/**
+ * 获取项目配置
+ */
+exports.getConfigs = function() {
+    return buildConfigs;
+};
+
+/**
+ * 获取项目所有的 htmls scripts
+ * @info 如果 process.env.actNames 为空，则打包所有的项目；如果需要打包多个项目，则使用 actNames = 项目1,项目2
+ */
+exports.getBuildFiles = function() {
+    var acts = getActNames();
+
+    // 获取所有 html 文件
+    var htmls = [];
+    var scripts = [];
+
+    // 遍历所有文件
+    for (var key in acts) {
+        // 读取所有 htmls 文件
+        try {
+            var files = utils.getAllFiles(acts[key] + '/html', /^(?!.*\/_inc)/);
+            for (var key2 in files) {
+                if (files[key2].indexOf('.DS_Store') > -1) {
+                    continue;
+                }
+                htmls.push(files[key2].replace(_path.app, ''));
+            }
+        } catch (e) {}
+
+        // 读取所有入口脚本
+        try {
+            files = utils.getAllFiles(acts[key] + '/js');
+            for (var key2 in files) {
+                if (files[key2].indexOf('.DS_Store') > -1) {
+                    continue;
+                }
+                scripts.push(files[key2].replace(_path.app, ''));
+            }
+        } catch (e) {}
+    }
+
+    return {
+        htmls: htmls,
+        scripts: scripts
+    };
+};
+
+/**
+ * 获取静态路由配置项
+ */
+exports.getStaticRoutes = function() {
+    var result = [];
+    var acts = getActNames();
+
+    for (var key in acts) {
+        var actPath = acts[key].replace(_path.app, '');
+        result.push(actPath + '/img');
+        result.push(actPath + '/mock');
+        result.push(actPath + '/fonts');
+        result.push(actPath + '/media');
+    }
+
+    return result;
+};
+
+/**
+ * 获取所有要打包的项目
+ */
+function getActNames() {
+    // 从配制中获取 actNames
+    var actNames = buildConfigs.actNames;
+    var acts = [];
+    // 如果 actNames 空，则读取 app 下所有文件
+    if (actNames == null || actNames == 'null' || actNames == 'undefined') {
+        acts = utils.getDirs(_path.app);
+    } else {
+        var dics = actNames.split(',');
+        for (var key in dics) {
+            var name = dics[key];
+            if (name != null && name != '') {
+                acts.push(_path.app + '/' + dics[key]);
+            }
+        }
+    }
+
+    var result = [];
+    for (var key in acts) {
+        if (acts[key] == componentPath || acts[key] == htmlPath || acts[key] == sassPath || acts[key] == ensurePath) {
+            continue;
+        }
+        if (utils.isExistsSync(acts[key] + '/html') && utils.isExistsSync(acts[key] + '/js')) {
+            result.push(acts[key]);
+        }
+    }
+
+    return result;
+};
+
+exports.getActNames = function() {
+    return getActNames();
+};
